@@ -1,9 +1,9 @@
 # Print
 A Java debugging utility.
 
-[latest version] = `1.0.1`
+[latest version] = `1.0.2`
 
-[dependencies] = [`io.github.skylarkarms:lambdas:1.0.1`](https://github.com/Skylarkarms/Lambdas)
+[dependencies] = [`io.github.skylarkarms:lambdas:1.0.2`](https://github.com/Skylarkarms/Lambdas)
 
 
 ### Implementation
