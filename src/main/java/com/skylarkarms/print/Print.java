@@ -116,7 +116,7 @@ public enum Print {
      * Prints a message
      * @param message the message to be printed
      * */
-    public void print(String message) { System.out.println(printer.apply(colorWrap, message)); }
+    public void ln(String message) { System.out.println(printer.apply(colorWrap, message)); }
 
     private static final String d_dot = ": ";
 
@@ -126,28 +126,28 @@ public enum Print {
      * @param TAG the tag to be prefixed.
      * @param message the message to be printed.
      * */
-    public void print(String TAG, String message) {
+    public void ln(String TAG, String message) {
         System.out.println(printer.apply(colorWrap, TAG + d_dot + message));
     }
 
     /**
-     * Variation of {@link #print(String, String)} that will call {@link String#valueOf(Object)}
+     * Variation of {@link #ln(String, String)} that will call {@link String#valueOf(Object)}
      * */
-    public void print(String TAG, Object o) { System.out.println(printer.apply(colorWrap, TAG + d_dot + o)); }
+    public void ln(String TAG, Object o) { System.out.println(printer.apply(colorWrap, TAG + d_dot + o)); }
 
-    public void print(Object o) { System.out.println(printer.apply(colorWrap, String.valueOf(o))); }
+    public void ln(Object o) { System.out.println(printer.apply(colorWrap, String.valueOf(o))); }
 
-    public void print(long aLong) {
+    public void ln(long aLong) {
         System.out.println(printer.apply(colorWrap, "long = ".concat(Long.toString(aLong))));
     }
 
-    public void print(String TAG, int i) { System.out.println(printer.apply(colorWrap, TAG + d_dot + "int = " + i)); }
+    public void ln(String TAG, int i) { System.out.println(printer.apply(colorWrap, TAG + d_dot + "int = " + i)); }
 
-    public void print(String TAG, Integer i) {
+    public void ln(String TAG, Integer i) {
         System.out.println(printer.apply(colorWrap, TAG + d_dot + "Integer = " + i));
     }
 
-    public void print(Integer i) { System.out.println(printer.apply(colorWrap, "Integer = " + i)); }
+    public void ln(Integer i) { System.out.println(printer.apply(colorWrap, "Integer = " + i)); }
 
     private static final PrintStream nonFlushed = System.out, flushed = new PrintStream(System.out, true);
 
@@ -227,10 +227,10 @@ public enum Print {
             return VAR_HANDLE.compareAndSet(this, prev, next);
         }
 
-        private void print(
+        private void ln(
                 String prefix, long toFormat
         ) {
-            color.print(
+            color.ln(
                     prefix + " at (chrono = " + chronoId + ")..." + formatNanos(format, toFormat)
             );
         }
@@ -263,7 +263,7 @@ public enum Print {
             assert last != 0 : "Must have called .start()";
             long lap = now - prev;
             if (compareAndSet(prev, now)) {
-                print(
+                ln(
                         "Lapsed", lap);
             }
         }
@@ -276,7 +276,7 @@ public enum Print {
                 long prev = last;
                 long lap = System.nanoTime() - prev;
                 last = lap;
-                print(
+                ln(
                         "Sync lapsed", lap);
             }
         }
