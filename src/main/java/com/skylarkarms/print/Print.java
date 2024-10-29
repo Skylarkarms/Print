@@ -14,7 +14,9 @@ import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.Date;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.function.LongUnaryOperator;
 
 /**
  * A Java Print dependency for easy debugging, uses the default {@link System#out} {@link PrintStream}.
@@ -22,7 +24,7 @@ import java.util.function.Function;
  * <p> Sub-components:
  * <ul>
  *     <li>
- *         {@link Chrono}
+ *         {@link Timer}
  *     </li>
  *     <li>
  *         {@link Export}
@@ -118,6 +120,10 @@ public enum Print {
      * */
     public void ln(String message) { System.out.println(printer.apply(colorWrap, message)); }
 
+    public String apply(String message) {
+        return printer.apply(colorWrap, message);
+    }
+
     private static final String d_dot = ": ";
 
     /**
@@ -199,39 +205,109 @@ public enum Print {
 
     public static String thisStack() { return Thread.currentThread().getStackTrace()[3].toString(); }
 
+    public static final class Nanos {
+
+        public static final class Format {
+            public static class UNITS {
+                final TimeUnit unit; final LongUnaryOperator mod;
+                public static final UNITS sec = new UNITS(TimeUnit.SECONDS, nano -> nano);
+                public static final UNITS mill = new UNITS(TimeUnit.MILLISECONDS, nano -> 1000);
+                public static final UNITS nano = new UNITS(TimeUnit.NANOSECONDS, nano -> 1_000_000);
+
+                UNITS(TimeUnit unit, LongUnaryOperator mod) {
+                    this.unit = unit;
+                    this.mod = mod;
+                }
+
+                String format(Duration d, long nano) {
+                    long res = unit.convert(d) % mod.applyAsLong(nano);
+                    return Long.toString(res).concat("[" + of(unit) + "]");
+                }
+            }
+            
+            final UNITS[] u;
+
+            Format(UNITS... u) {
+                this.u = u;
+            }
+
+            public static final Format sec = new Format(UNITS.sec);
+            public static final Format mill = new Format(UNITS.mill);
+            public static final Format nano = new Format(UNITS.nano);
+            public static final Format mill_nan = new Format(UNITS.mill, UNITS.nano);
+            public static final Format full = new Format(UNITS.sec, UNITS.mill, UNITS.nano);
+        }
+        
+        final long start = System.nanoTime();
+        
+        public long lapse() {
+            return System.nanoTime() - start;
+        }
+        
+        public String lapse(Format format) {
+            return toString(System.nanoTime() - start, format.u);
+        }
+        
+        public static String toString(long nanoseconds, Format nanoFormat) {
+            return toString(nanoseconds, nanoFormat.u);
+        }
+        
+        public static String toString(long nanos, Format.UNITS... units) {
+            int l = units.length;
+            Duration d = Duration.ofNanos(nanos);
+            StringBuilder b = new StringBuilder(l);
+            int l_i = l - 1;
+            if (l > 1) {
+                for (int i = 0; i < l_i; i++) {
+                    b.append(units[i].format(d, nanos)).append(": ");
+                }
+            }
+            b.append(units[l_i].format(d, nanos));
+            return b.toString();
+        }
+        public static String toString(long nanos) {
+            return toString(nanos, Format.full.u);
+        }
+
+        static String of(TimeUnit unit) {
+            return switch (unit) {
+                case SECONDS -> "secs";
+                case MILLISECONDS -> "millis";
+                case NANOSECONDS -> "nanos";
+                default -> throw new IllegalStateException(unit.name());
+            };
+        }
+    }
+
     /**
      * Component that helps is the measure of nanos via
      * atomic CAS-sing.
      * */
-    public static final class Chrono {
+    public static final class Timer {
         private static int id = 0;
         private volatile long begin;
         private final Object lock = new Object();
         private volatile long last;
-        private final Format format;
+        private final Nanos.Format nanoFormat;
         private final Print color;
         private final int chronoId = id++;
 
 
-        private static final VarHandle VAR_HANDLE;
+        private static final VarHandle LAST;
 
         static {
             try {
-                VAR_HANDLE = MethodHandles.lookup().findVarHandle(Chrono.class, "last", long.class);
+                LAST = MethodHandles.lookup().findVarHandle(Timer.class, "last", long.class);
             } catch (ReflectiveOperationException e) {
                 throw new ExceptionInInitializerError(e);
             }
-        }
-
-        private boolean compareAndSet(long prev, long next) {
-            return VAR_HANDLE.compareAndSet(this, prev, next);
         }
 
         private void ln(
                 String prefix, long toFormat
         ) {
             color.ln(
-                    prefix + " at (chrono = " + chronoId + ")..." + formatNanos(format, toFormat)
+                    prefix + " at (chrono = " + chronoId + ")...\n" + Nanos.toString(toFormat, nanoFormat).indent(3)
             );
         }
 
@@ -240,7 +316,7 @@ public enum Print {
          * */
         public void elapsed() {
             System.out.println(color.printer.apply(color.colorWrap,
-                    "Elapsed" + " at (chrono = " + chronoId + ")..." + formatNanos(format, System.nanoTime() - begin)
+                    "Elapsed" + " at (chrono = " + chronoId + ")...\n" + Nanos.toString(System.nanoTime() - begin, nanoFormat).indent(3)
             ));
         }
 
@@ -262,7 +338,7 @@ public enum Print {
             long prev = last, now = System.nanoTime();
             assert last != 0 : "Must have called .start()";
             long lap = now - prev;
-            if (compareAndSet(prev, now)) {
+            if (LAST.compareAndSet(this, prev, now)) {
                 ln(
                         "Lapsed", lap);
             }
@@ -281,41 +357,10 @@ public enum Print {
             }
         }
 
-        private static final String nanos_format = "%d Nanos";
-        private static final String full_format = "%d Secs. %d Millis. %d Nanos";
-
-        /**
-         * Defines the way in which the {@link Chrono} object will print the time passed.
-         * */
-        public enum Format {
-            /**
-             * Will display just the nanos passed.
-             * */
-            nanos(
-                    duration -> String.format(nanos_format, duration.getNano())
-            ),
-            /**
-             * Will display the nanos passed in the format: {@link #full_format}
-             * */
-            full(
-                    duration -> String.format(full_format, duration.getSeconds(), duration.toMillisPart(), duration.toNanosPart())
-            );
-            final ToStringFunction<Duration> format;
-
-            Format(ToStringFunction<Duration> format) {
-                this.format = format;
-            }
-        }
-
-        static String formatNanos(Format format, long nanoseconds) {
-            Duration duration = Duration.ofNanos(nanoseconds); // create a duration object
-            return format.format.apply(duration);
-        }
-
         static final SimpleDateFormat sdf = new SimpleDateFormat("hh:mm a");
 
         /**
-         * Default implementation of {@link #Chrono(Format, Print, boolean)}.
+         * Default implementation of {@link #Timer(Nanos.Format, Print, boolean)}.
          * <p> Where:
          * <ul>
          *     <li>
@@ -323,45 +368,45 @@ public enum Print {
          *     </li>
          * </ul>
          * */
-        public Chrono(Format format, Print color) {
-            this(format, color, false);
+        public Timer(Nanos.Format nanoFormat, Print color) {
+            this(nanoFormat, color, false);
         }
 
         /**
-         * Mina constructor for the {@link Chrono} class
+         * Mina constructor for the {@link Timer} class
          * @param start, set's the chronometer going when this constructor is called with true.
          * @param color the color of the print
-         * @param format the {@link Format} by which the nanos will be displayed.
+         * @param nanoFormat the {@link Nanos.Format} by which the nanos will be displayed.
          * */
-        public Chrono(Format format, Print color, boolean start) {
+        public Timer(Nanos.Format nanoFormat, Print color, boolean start) {
             this.color = color;
-            this.format = format;
+            this.nanoFormat = nanoFormat;
             if (start) start();
         }
 
         /**
-         * Default implementation of {@link #Chrono(Format, Print)}
+         * Default implementation of {@link #Timer(Nanos.Format, Print)}
          * <p> Where:
          * <ul>
          *     <li>
-         *         {@link Format} = {@link Format#full}
+         *         {@link Nanos.Format} = {@link Nanos.Format#full}
          *     </li>
          * </ul>
          * */
-        public Chrono(Print color) {
-            this(Format.full, color);
+        public Timer(Print color) {
+            this(Nanos.Format.full, color);
         }
 
         /**
-         * Default implementation of {@link #Chrono(Format, Print, boolean)}
+         * Default implementation of {@link #Timer(Nanos.Format, Print, boolean)}
          * <p> Where:
          * <ul>
          *     <li>
-         *         {@link Format} = {@link Format#full}
+         *         {@link Nanos.Format} = {@link Nanos.Format#full}
          *     </li>
          * </ul>
          * */
-        Chrono(Print color, boolean start) { this(Format.full, color, start); }
+        Timer(Print color, boolean start) { this(Nanos.Format.full, color, start); }
 
         /**
          * Will set the starting time ({@link #begin}) to the exact {@link System#nanoTime()} when this method is being called.
@@ -369,8 +414,11 @@ public enum Print {
         public void start() {
             this.begin = System.nanoTime();
             this.last = begin;
-            System.out.println(color.printer.apply(color.colorWrap,
-                    "Chrono " + chronoId + ", begins at = " + sdf.format(new Date(System.currentTimeMillis()))
+            System.out.println(
+                    color.printer.apply(
+                            color.colorWrap,
+                            "\n >>> Timer " + chronoId + ", begins at = " +
+                                    "\n" + sdf.format(new Date(System.currentTimeMillis())).indent(3)
             ));
         }
 
@@ -388,13 +436,15 @@ public enum Print {
         public String startText() {
             this.begin = System.nanoTime();
             this.last = begin;
-            return color.printer.apply(color.colorWrap,
-                    "Chrono " + chronoId + ", begins at = " + sdf.format(new Date(System.currentTimeMillis()))
+            return color.printer.apply(
+                    color.colorWrap,
+                    "\n >>> Timer " + chronoId + ", begins at = " +
+                            "\n" + sdf.format(new Date(System.currentTimeMillis())).indent(3)
             );
         }
 
         /**
-         * @return a {@link Chrono} object that implements a {@link #Chrono(Print, boolean)} constructor,
+         * @return a {@link Timer} object that implements a {@link #Timer(Print, boolean)} constructor,
          * <p> Where:
          * <ul>
          *     <li>
@@ -402,7 +452,7 @@ public enum Print {
          *     </li>
          * </ul>
          * */
-        public static Chrono begin(Print color) { return new Chrono(color, true); }
+        public static Timer begin(Print color) { return new Timer(color, true); }
     }
 
     /**
