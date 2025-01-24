@@ -1,10 +1,12 @@
 # Print
 A Java debugging utility.
 
-[latest version] = `1.0.5`
+[latest version] = `1.0.6`
 
-[dependencies] = [`io.github.skylarkarms:lambdas:1.0.3`](https://github.com/Skylarkarms/Lambdas)
+[dependencies] = [`io.github.skylarkarms:lambdas:1.0.4`](https://github.com/Skylarkarms/Lambdas)
 
+[found in]:
+      - [`io.github.skylarkarms:solo:`](https://github.com/Skylarkarms/solo)
 
 ### Implementation
 In your `build.gradle` file
