@@ -53,7 +53,7 @@ public enum Print {
         Applier stack = (op, s) -> {
             StackTraceElement[] es = Thread.currentThread().getStackTrace();
             return op.apply(s.concat(
-                    Exceptionals.formatStack(Math.min(star_at, es.length - 1), es)
+                    Exceptionals.formatStack(star_at, STACK_END.ref, es)
             ));
         };
     }
@@ -99,6 +99,35 @@ public enum Print {
      * @implNote If start_at is greater than the length of the StackTraceElement[], the last index will be displayed instead..
      * */
     private static int star_at = 3;
+    /**
+     * The non-inclusive last index of the printed StackTraceElement array.
+     * */
+    private static volatile int stackEnd = Integer.MAX_VALUE;
+    private static volatile boolean stackEnd_grabbed = false;
+    record STACK_END() {
+        static {stackEnd_grabbed = true;}
+        static final int ref = stackEnd;
+    }
+
+    public static void setStackEnd(int stackEnd) {
+        if (stackEnd_grabbed) throw new IllegalStateException("an instance of Print has already been initialized.");
+        if (stackEnd < 1) throw new IllegalStateException("Value cannot be lesser than 1.");
+        Print.stackEnd = stackEnd;
+        if (!printStack) {
+            printStack(true);
+        }
+    }
+
+    /**
+     * Sets a {@link #stackEnd} based on a distance from {@link #star_at}, which will start at the default value of: `3`
+     * */
+    public static void setStackDepth(int depth) {
+        setStackEnd(star_at + depth);
+    }
+
+    public static void printSingleStack() {
+        setStackEnd(star_at + 1);
+    }
 
     /**
      * Defines the index at which the stack will begin being printed.
@@ -109,7 +138,7 @@ public enum Print {
     }
 
     Print(String color) {
-        colorWrap = s -> color + s + ANSI_RESET;
+        colorWrap = s -> s.replaceAll("(?m)^", color) + ANSI_RESET;
         printer = isStackPrinted() ? Applier.stack : Applier.ident;
 
     }
@@ -180,13 +209,10 @@ public enum Print {
                      || >>>>>>>> || ** \s""".indent(1);
 
     private static final String space = "\s";
-    private static String toPhrase(String... words) {
-        return String.join(space, words);
-    }
 
     public static String depthStack(int depth) {
         StackTraceElement[] elements = Thread.currentThread().getStackTrace();
-        return toPhrase(ofSize(
+        return String.join(space, ofSize(
                 depth,
                 i -> elements[4 + i].toString() + ", \n "
         ));
