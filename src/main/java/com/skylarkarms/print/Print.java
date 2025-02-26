@@ -47,8 +47,15 @@ public enum Print {
     private static final String ANSI_RESET = "\u001B[0m";
 
     private final Funs.Unaries.OfString colorWrap;
+    @FunctionalInterface
     interface Applier {
         String apply(Funs.Unaries.OfString op, String s);
+        default String apply(int startAt, int endAt, Funs.Unaries.OfString op, String s) {
+            StackTraceElement[] es = Thread.currentThread().getStackTrace();
+            return op.apply(s.concat(
+                    Exceptionals.formatStack(startAt, endAt, es)
+            ));
+        }
         Applier ident = Function::apply;
         Applier stack = (op, s) -> {
             StackTraceElement[] es = Thread.currentThread().getStackTrace();
@@ -121,13 +128,9 @@ public enum Print {
     /**
      * Sets a {@link #stackEnd} based on a distance from {@link #star_at}, which will start at the default value of: `3`
      * */
-    public static void setStackDepth(int depth) {
-        setStackEnd(star_at + depth);
-    }
+    public static void setStackDepth(int depth) { setStackEnd(star_at + depth); }
 
-    public static void printSingleStack() {
-        setStackEnd(star_at + 1);
-    }
+    public static void printSingleStack() { setStackEnd(star_at + 1); }
 
     /**
      * Defines the index at which the stack will begin being printed.
@@ -149,9 +152,35 @@ public enum Print {
      * */
     public void ln(String message) { System.out.println(printer.apply(colorWrap, message)); }
 
-    public String apply(String message) {
-        return printer.apply(colorWrap, message);
-    }
+    /**
+     * Prints a message
+     * @param message the message to be printed.
+     * @param stackDepth the depth of the stack to be printed.
+     * */
+    public void ln(int stackDepth, String message) { System.out.println(printer.apply(star_at, star_at + stackDepth, colorWrap, message)); }
+
+    /**
+     * Prints a message
+     * @param message the message to be printed.
+     * @param at the index of the stack to be printed.
+     * */
+    public void stackLn(int at, String message) { System.out.println(printer.apply(at, at + 1, colorWrap, message)); }
+
+    /**
+     * Prints a message with the single stack of this call.
+     * @param message the message to be printed.
+     * */
+    public void stackLn(String message) { System.out.println(printer.apply(3, 4, colorWrap, message)); }
+
+    /**
+     * Prints a message
+     * @param message the message to be printed.
+     * @param stackStart the index at which the stack will begin being printed.
+     * @param stackEnd the index at which the stack will stop being printed.
+     * */
+    public void ln(int stackStart, int stackEnd, String message) { System.out.println(printer.apply(stackStart, stackEnd, colorWrap, message)); }
+
+    public String apply(String message) { return printer.apply(colorWrap, message); }
 
     private static final String d_dot = ": ";
 
@@ -163,6 +192,16 @@ public enum Print {
      * */
     public void ln(String TAG, String message) {
         System.out.println(printer.apply(colorWrap, TAG + d_dot + message));
+    }
+
+    /**
+     * Prints a message with a `TAG` of format:
+     * <p> TAG: [Message begins here...]
+     * @param TAG the tag to be prefixed.
+     * @param message the message to be printed.
+     * */
+    public void ln(int stackDepth, String TAG, String message) {
+        System.out.println(printer.apply(star_at, star_at + stackDepth, colorWrap, TAG + d_dot + message));
     }
 
     /**
